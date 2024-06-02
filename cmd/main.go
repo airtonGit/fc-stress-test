@@ -2,15 +2,17 @@ package main
 
 import (
 	"fmt"
-	"github.com/airtongit/fc-stress-test/internal"
 	"net/http"
+	"net/url"
+	"strings"
 
+	"github.com/airtongit/fc-stress-test/internal"
 	"github.com/spf13/cobra"
 )
 
 func main() {
 	var (
-		url                   string
+		targetURL             string
 		requests, concurrency int
 	)
 
@@ -18,9 +20,19 @@ func main() {
 		Use:   "fc-stress-test",
 		Short: "A simple stress test for Firecracker",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("Hello, %s, %d requests, %d concurrency!\n", url, requests, concurrency)
+			fmt.Printf("Hello, %s, %d requests, %d concurrency!\n", targetURL, requests, concurrency)
 
-			req, err := http.NewRequest("GET", url, nil)
+			if !strings.HasPrefix(targetURL, "http://") {
+				targetURL = "http://" + targetURL
+			}
+
+			requestURL, err := url.Parse(targetURL)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+
+			req, err := http.NewRequest("GET", requestURL.String(), nil)
 			if err != nil {
 				fmt.Println(err)
 				return
@@ -35,8 +47,8 @@ func main() {
 		},
 	}
 
-	rootCmd.Flags().StringVarP(&url, "url", "u", "", "Target service to stress test")
-	rootCmd.MarkFlagRequired("url")
+	rootCmd.Flags().StringVarP(&targetURL, "targetURL", "u", "", "Target service to stress test")
+	rootCmd.MarkFlagRequired("targetURL")
 	rootCmd.Flags().IntVarP(&requests, "requests", "r", 1, "Total number of requests to send")
 	rootCmd.MarkFlagRequired("requests")
 	rootCmd.Flags().IntVarP(&concurrency, "concurrency", "c", 1, "Number of concurrent requests to send")

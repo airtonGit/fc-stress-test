@@ -26,12 +26,12 @@ func (s *stressTester) Run(ctx context.Context) {
 	requestsC := make(chan struct{})
 	wg := new(sync.WaitGroup)
 	wg.Add(s.Concurrency)
-	for range s.Concurrency {
+	for i := 1; i <= s.Concurrency; i++ {
 		go s.ReqWorker.DoRequest(ctx, wg, requestsC)
 	}
 	fmt.Println("Stating requests ", s.TotalRequests)
 	begin := time.Now()
-	for range s.TotalRequests {
+	for i := 1; i <= s.TotalRequests; i++ {
 		requestsC <- struct{}{}
 	}
 	close(requestsC)
