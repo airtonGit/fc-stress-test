@@ -4,34 +4,36 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 )
 
 type stressTester struct {
 	ReqWorker     *requestWorker
-	URL           string
 	TotalRequests int
 	Concurrency   int
 }
 
-func NewStressTester(reqWorker *requestWorker, url string, totalRequests int, concurrency int) *stressTester {
+func NewStressTester(reqWorker *requestWorker, totalRequests int, concurrency int) *stressTester {
 	return &stressTester{
 		ReqWorker:     reqWorker,
-		URL:           url,
 		TotalRequests: totalRequests,
 		Concurrency:   concurrency,
 	}
 }
 
-func (s *stressTester) run(ctx context.Context) {
+func (s *stressTester) Run(ctx context.Context) {
 	requestsC := make(chan struct{})
-
+	wg := new(sync.WaitGroup)
+	wg.Add(s.Concurrency)
 	for range s.Concurrency {
-		go s.ReqWorker.DoRequest(ctx, requestsC)
+		go s.ReqWorker.DoRequest(ctx, wg, requestsC)
 	}
 
 	for range s.TotalRequests {
 		requestsC <- struct{}{}
 	}
+	close(requestsC)
+
 }
 
 type HttpClient interface {
@@ -73,7 +75,8 @@ func (r *requestWorker) ResultReport() {
 	}
 }
 
-func (r *requestWorker) DoRequest(ctx context.Context, requestsC chan struct{}) {
+func (r *requestWorker) DoRequest(ctx context.Context, wg *sync.WaitGroup, requestsC chan struct{}) {
+	defer wg.Done()
 	for range requestsC {
 		if ctx.Err() != nil {
 			close(r.respC)
