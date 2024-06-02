@@ -47,7 +47,7 @@ func main() {
 		},
 	}
 
-	rootCmd.Flags().StringVarP(&targetURL, "targetURL", "u", "", "Target service to stress test")
+	rootCmd.Flags().StringVarP(&targetURL, "url", "u", "", "Target service to stress test")
 	rootCmd.MarkFlagRequired("targetURL")
 	rootCmd.Flags().IntVarP(&requests, "requests", "r", 1, "Total number of requests to send")
 	rootCmd.MarkFlagRequired("requests")
