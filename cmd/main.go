@@ -32,7 +32,6 @@ func main() {
 
 			stressTester := internal.NewStressTester(reqWorker, requests, concurrency)
 			stressTester.Run(cmd.Context())
-			reqWorker.ResultReport()
 		},
 	}
 

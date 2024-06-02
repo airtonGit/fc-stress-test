@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 )
 
 type stressTester struct {
@@ -28,12 +29,14 @@ func (s *stressTester) Run(ctx context.Context) {
 	for range s.Concurrency {
 		go s.ReqWorker.DoRequest(ctx, wg, requestsC)
 	}
-
+	fmt.Println("Stating requests ", s.TotalRequests)
+	begin := time.Now()
 	for range s.TotalRequests {
 		requestsC <- struct{}{}
 	}
 	close(requestsC)
-
+	wg.Wait()
+	s.ReqWorker.ResultReport(begin)
 }
 
 type HttpClient interface {
@@ -57,29 +60,37 @@ func NewRequestWorker(client HttpClient, req *http.Request) *requestWorker {
 	rw := &requestWorker{
 		httpClient: client,
 		req:        req,
+		respC:      make(chan *http.Response),
 	}
 	go rw.responsesConsumer()
 	return rw
 }
 
-func (r *requestWorker) ResultReport() {
+func (r *requestWorker) ResultReport(begin time.Time) {
+	close(r.respC)
+	elaspsed := time.Since(begin)
 	summary := make(map[int]int)
+
 	for _, response := range r.responses {
-		summary[response.StatusCode]++
+		statusCode := response.StatusCode
+		if _, ok := summary[statusCode]; !ok {
+			summary[statusCode] = 0
+		}
+		summary[statusCode]++
 	}
-	fmt.Println(fmt.Sprintf("Quantidade de request 200: %d", summary[200]))
+	fmt.Println(fmt.Sprintf("Quantidade de request status 200: %d", summary[200]))
 	delete(summary, 200)
-	fmt.Println("Outros status codes")
+	fmt.Println("Outros status codes qtd", len(summary))
 	for code, count := range summary {
 		fmt.Println(fmt.Sprintf("Quantidade de request %d: %d", code, count))
 	}
+	fmt.Println("Elapsed time", elaspsed.Seconds(), "seconds")
 }
 
 func (r *requestWorker) DoRequest(ctx context.Context, wg *sync.WaitGroup, requestsC chan struct{}) {
 	defer wg.Done()
 	for range requestsC {
 		if ctx.Err() != nil {
-			close(r.respC)
 			fmt.Print("context error", ctx.Err())
 			return
 		}
@@ -89,5 +100,4 @@ func (r *requestWorker) DoRequest(ctx context.Context, wg *sync.WaitGroup, reque
 		}
 		r.respC <- resp
 	}
-	close(r.respC)
 }
