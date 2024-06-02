@@ -24,19 +24,25 @@ func NewStressTester(reqWorker *requestWorker, totalRequests int, concurrency in
 
 func (s *stressTester) Run(ctx context.Context) {
 	requestsC := make(chan struct{})
+	responsesC := make(chan *http.Response)
+	respConsumerDoneSignalC := make(chan struct{})
+	go s.ReqWorker.ResponsesConsumer(respConsumerDoneSignalC, responsesC)
+
 	wg := new(sync.WaitGroup)
 	wg.Add(s.Concurrency)
 	for i := 1; i <= s.Concurrency; i++ {
-		go s.ReqWorker.DoRequest(ctx, wg, requestsC)
+		go s.ReqWorker.DoRequest(ctx, wg, requestsC, responsesC)
 	}
 	fmt.Println("Stating requests ", s.TotalRequests)
-	begin := time.Now()
+	requestsBeginTimestamp := time.Now()
 	for i := 1; i <= s.TotalRequests; i++ {
 		requestsC <- struct{}{}
 	}
 	close(requestsC)
 	wg.Wait()
-	s.ReqWorker.ResultReport(begin)
+	close(responsesC)
+	<-respConsumerDoneSignalC
+	s.ReqWorker.ResultReport(requestsBeginTimestamp)
 }
 
 type HttpClient interface {
@@ -46,31 +52,30 @@ type HttpClient interface {
 type requestWorker struct {
 	httpClient HttpClient
 	req        *http.Request
-	respC      chan *http.Response
 	responses  []*http.Response
-}
-
-func (r *requestWorker) responsesConsumer() {
-	for response := range r.respC {
-		r.responses = append(r.responses, response)
-	}
 }
 
 func NewRequestWorker(client HttpClient, req *http.Request) *requestWorker {
 	rw := &requestWorker{
 		httpClient: client,
 		req:        req,
-		respC:      make(chan *http.Response),
 	}
-	go rw.responsesConsumer()
+
 	return rw
 }
 
-func (r *requestWorker) ResultReport(begin time.Time) {
-	close(r.respC)
-	elaspsed := time.Since(begin)
-	summary := make(map[int]int)
+func (r *requestWorker) ResponsesConsumer(doneC chan struct{}, responsesC chan *http.Response) {
+	for response := range responsesC {
+		r.responses = append(r.responses, response)
+	}
+	doneC <- struct{}{}
+}
 
+func (r *requestWorker) ResultReport(begin time.Time) {
+	elapsed := time.Since(begin)
+	fmt.Println("Elapsed time", elapsed.Seconds(), "seconds")
+
+	summary := make(map[int]int)
 	for _, response := range r.responses {
 		statusCode := response.StatusCode
 		if _, ok := summary[statusCode]; !ok {
@@ -78,16 +83,17 @@ func (r *requestWorker) ResultReport(begin time.Time) {
 		}
 		summary[statusCode]++
 	}
-	fmt.Println(fmt.Sprintf("Quantidade de request status 200: %d", summary[200]))
+
+	fmt.Println(fmt.Sprintf("=> Quantidade de request status 200: %d", summary[200]))
 	delete(summary, 200)
-	fmt.Println("Outros status codes qtd", len(summary))
+	fmt.Println("=> Outros status codes qtd", len(summary))
+
 	for code, count := range summary {
-		fmt.Println(fmt.Sprintf("Quantidade de request %d: %d", code, count))
+		fmt.Println(fmt.Sprintf("=> Quantidade de request %d: %d", code, count))
 	}
-	fmt.Println("Elapsed time", elaspsed.Seconds(), "seconds")
 }
 
-func (r *requestWorker) DoRequest(ctx context.Context, wg *sync.WaitGroup, requestsC chan struct{}) {
+func (r *requestWorker) DoRequest(ctx context.Context, wg *sync.WaitGroup, requestsC chan struct{}, responsesC chan *http.Response) {
 	defer wg.Done()
 	for range requestsC {
 		if ctx.Err() != nil {
@@ -98,6 +104,6 @@ func (r *requestWorker) DoRequest(ctx context.Context, wg *sync.WaitGroup, reque
 		if err != nil {
 			fmt.Print("error", err)
 		}
-		r.respC <- resp
+		responsesC <- resp
 	}
 }
