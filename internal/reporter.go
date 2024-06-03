@@ -7,8 +7,7 @@ import (
 )
 
 type resultsReporter struct {
-	responses []*http.Response
-	//ResponsesC chan *http.Response
+	responses     []*http.Response
 	consumerDoneC chan struct{}
 }
 
@@ -16,7 +15,6 @@ func NewResultsReporter() *resultsReporter {
 	return &resultsReporter{
 		responses:     make([]*http.Response, 0),
 		consumerDoneC: make(chan struct{}),
-		// ResponsesC: make(chan *http.Response),
 	}
 }
 
