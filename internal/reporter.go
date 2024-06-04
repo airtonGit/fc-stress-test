@@ -2,25 +2,24 @@ package internal
 
 import (
 	"fmt"
-	"net/http"
 	"time"
 )
 
 type resultsReporter struct {
-	responses     []*http.Response
+	responses     []RequestResult
 	consumerDoneC chan struct{}
 }
 
 func NewResultsReporter() *resultsReporter {
 	return &resultsReporter{
-		responses:     make([]*http.Response, 0),
+		responses:     make([]RequestResult, 0),
 		consumerDoneC: make(chan struct{}),
 	}
 }
 
-func (r *resultsReporter) ConsumeResponses(responsesC chan *http.Response) {
-	for response := range responsesC {
-		r.responses = append(r.responses, response)
+func (r *resultsReporter) ConsumeResponses(responsesC chan RequestResult) {
+	for requestResult := range responsesC {
+		r.responses = append(r.responses, requestResult)
 	}
 	r.consumerDoneC <- struct{}{}
 }
@@ -30,18 +29,23 @@ func (r *resultsReporter) ResultReport(begin time.Time) {
 	elapsed := time.Since(begin)
 	fmt.Println("Elapsed time", elapsed.Seconds(), "seconds")
 
-	summary := make(map[int]int)
-	for _, response := range r.responses {
-		statusCode := response.StatusCode
+	summary := make(map[string]int)
+	for _, requestResult := range r.responses {
+		if requestResult.Error != nil {
+			summary["error"]++
+			continue
+		}
+		statusCode := fmt.Sprintf("%d", requestResult.Response.StatusCode)
 		if _, ok := summary[statusCode]; !ok {
 			summary[statusCode] = 0
 		}
 		summary[statusCode]++
+		requestResult.Response.Body.Close()
 	}
 
-	fmt.Println(fmt.Sprintf("=> status 200: %d", summary[200]))
-	delete(summary, 200)
+	fmt.Println(fmt.Sprintf("=> status 200: %d", summary["200"]))
+	delete(summary, "200")
 	for code, count := range summary {
-		fmt.Println(fmt.Sprintf("=> status %d: %d", code, count))
+		fmt.Println(fmt.Sprintf("=> status %s: %d", code, count))
 	}
 }

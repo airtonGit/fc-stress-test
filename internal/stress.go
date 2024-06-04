@@ -24,7 +24,7 @@ func NewStressTester(reqWorker *requestWorker, totalRequests int, concurrency in
 
 func (s *stressTester) Run(ctx context.Context) {
 	requestsC := make(chan struct{})
-	responsesC := make(chan *http.Response)
+	responsesC := make(chan RequestResult)
 	reporter := NewResultsReporter()
 	go reporter.ConsumeResponses(responsesC)
 
@@ -63,7 +63,12 @@ func NewRequestWorker(client HttpClient, req *http.Request) *requestWorker {
 	return rw
 }
 
-func (r *requestWorker) DoRequest(ctx context.Context, wg *sync.WaitGroup, requestsC chan struct{}, responsesC chan *http.Response) {
+type RequestResult struct {
+	Response *http.Response
+	Error    error
+}
+
+func (r *requestWorker) DoRequest(ctx context.Context, wg *sync.WaitGroup, requestsC chan struct{}, responsesC chan RequestResult) {
 	defer wg.Done()
 	for range requestsC {
 		if ctx.Err() != nil {
@@ -72,8 +77,16 @@ func (r *requestWorker) DoRequest(ctx context.Context, wg *sync.WaitGroup, reque
 		}
 		resp, err := r.httpClient.Do(r.req)
 		if err != nil {
-			fmt.Print("error", err)
+			fmt.Print("error ", err)
+			responsesC <- RequestResult{
+				Response: nil,
+				Error:    err,
+			}
+			return
 		}
-		responsesC <- resp
+		responsesC <- RequestResult{
+			Response: resp,
+			Error:    nil,
+		}
 	}
 }
