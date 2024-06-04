@@ -77,7 +77,7 @@ func (r *requestWorker) DoRequest(ctx context.Context, wg *sync.WaitGroup, reque
 		}
 		resp, err := r.httpClient.Do(r.req)
 		if err != nil {
-			fmt.Print("error ", err)
+			fmt.Println("error ", err)
 			responsesC <- RequestResult{
 				Response: nil,
 				Error:    err,
